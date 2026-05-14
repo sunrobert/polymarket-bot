@@ -22,6 +22,10 @@ class PaperExecutor:
         snap = self._latest.get(intent.market_id)
         if snap is None:
             return None
+
+        if intent.action == "sell":
+            return self._fill_sell(intent, snap)
+
         asks = self._asks_for(snap, intent.side)
         if not asks:
             return None
@@ -62,6 +66,57 @@ class PaperExecutor:
             shares=total_shares,
             avg_price=avg_price,
             timestamp=snap.timestamp,
+            action="buy",
+        )
+
+    def _fill_sell(self, intent: TradeIntent, snap: MarketSnapshot) -> Fill | None:
+        # For a binary, implied bids for `side` come from the opposite side's
+        # asks: bid_price = 1 - opp_ask_price, bid_size = opp_ask_size.
+        # Best bid is the lowest opposite ask. Walk worst-to-best is unusual;
+        # we walk best (highest bid) first by reading opposite asks low-to-high.
+        opp_asks = self._asks_for(snap, "down" if intent.side == "up" else "up")
+        if not opp_asks:
+            return None
+        shares_to_sell = intent.shares
+        if shares_to_sell is None or shares_to_sell <= 0:
+            return None
+
+        remaining = shares_to_sell
+        total_shares = Decimal("0")
+        total_proceeds = Decimal("0")
+        levels_touched = 0
+        last_price: Decimal | None = None
+
+        for level in opp_asks:
+            if remaining <= 0:
+                break
+            bid_price = Decimal("1") - level.price
+            if bid_price <= 0:
+                continue
+            bid_size = level.size
+            levels_touched += 1
+            last_price = bid_price
+            if bid_size >= remaining:
+                total_shares += remaining
+                total_proceeds += remaining * bid_price
+                remaining = Decimal("0")
+                break
+            total_shares += bid_size
+            total_proceeds += bid_size * bid_price
+            remaining -= bid_size
+
+        if total_shares <= 0:
+            return None
+        # Partial fills allowed for sells: report what we got.
+        avg_price = last_price if levels_touched == 1 else total_proceeds / total_shares
+        return Fill(
+            intent_id=intent.intent_id,
+            market_id=intent.market_id,
+            side=intent.side,
+            shares=total_shares,
+            avg_price=avg_price,
+            timestamp=snap.timestamp,
+            action="sell",
         )
 
     @staticmethod

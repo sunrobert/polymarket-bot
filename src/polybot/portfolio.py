@@ -21,7 +21,36 @@ class Portfolio:
         pos = self._positions.get(market_id)
         return pos is not None and not pos.resolved
 
+    def get_position(self, market_id: str):
+        pos = self._positions.get(market_id)
+        if pos is None or pos.resolved:
+            return None
+        return pos
+
     def apply_fill(self, fill: Fill) -> None:
+        if fill.action == "sell":
+            pos = self._positions.get(fill.market_id)
+            if pos is None or pos.resolved:
+                return
+            proceeds = fill.shares * fill.avg_price
+            # Pro-rata cost basis for the shares being sold.
+            cost_share = pos.cost_usdc * (fill.shares / pos.shares) if pos.shares > 0 else Decimal("0")
+            pnl = proceeds - cost_share
+            self.day_pnl += pnl
+            self.total_pnl += pnl
+            remaining_shares = pos.shares - fill.shares
+            if remaining_shares <= Decimal("0"):
+                pos.resolved = True
+                pos.pnl_usdc = (pos.pnl_usdc or Decimal("0")) + pnl
+                pos.shares = Decimal("0")
+                pos.cost_usdc = Decimal("0")
+            else:
+                pos.shares = remaining_shares
+                pos.cost_usdc -= cost_share
+                pos.pnl_usdc = (pos.pnl_usdc or Decimal("0")) + pnl
+            self.day_trades += 1
+            return
+
         cost = fill.shares * fill.avg_price
         self._positions[fill.market_id] = Position(
             market_id=fill.market_id,

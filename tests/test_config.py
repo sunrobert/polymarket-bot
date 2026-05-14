@@ -21,6 +21,10 @@ bot2_signal:
   min_edge: 0.02
   sigma_per_sec_bps: 1.5
   price_band: [0.05, 0.99]
+bot3_dipbuyer:
+  entry_price: 0.35
+  exit_price: 0.55
+  trade_size_usdc: 5.00
 risk:
   max_daily_trades: 50
   max_daily_loss_usdc: 10.00
@@ -48,6 +52,10 @@ def test_load_config_parses_decimal(tmp_path: Path):
     assert cfg.risk.max_daily_loss_usdc == Decimal("10.00")
     assert cfg.recorder.dir == "recordings"
     assert cfg.feed.series_slug == "btc-up-or-down-5m"
+    assert cfg.bot3_dipbuyer is not None
+    assert cfg.bot3_dipbuyer.entry_price == Decimal("0.35")
+    assert cfg.bot3_dipbuyer.exit_price == Decimal("0.55")
+    assert cfg.bot3_dipbuyer.trade_size_usdc == Decimal("5.00")
 
 
 def test_load_config_rejects_bad_band(tmp_path: Path):

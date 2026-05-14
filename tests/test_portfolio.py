@@ -83,3 +83,46 @@ def test_resolution_for_unknown_market_is_noop():
         ResolutionEvent(market_id="ghost", timestamp=_ts(), winning_side="up")
     )
     assert p.day_pnl == Decimal("0")
+
+
+def test_sell_fill_books_pnl_and_closes():
+    p = Portfolio(max_daily_trades=10, max_daily_loss_usdc=Decimal("10"))
+    # Bought 10 Up shares at $0.30 → cost $3.00
+    p.apply_fill(
+        Fill(
+            intent_id="b1",
+            market_id="m1",
+            side="up",
+            shares=Decimal("10"),
+            avg_price=Decimal("0.30"),
+            timestamp=_ts(),
+            action="buy",
+        )
+    )
+    assert p.holds_market("m1")
+    # Sell all 10 shares at $0.55 → proceeds $5.50, P&L = +$2.50
+    p.apply_fill(
+        Fill(
+            intent_id="s1",
+            market_id="m1",
+            side="up",
+            shares=Decimal("10"),
+            avg_price=Decimal("0.55"),
+            timestamp=_ts(),
+            action="sell",
+        )
+    )
+    assert p.day_pnl == Decimal("2.50")
+    assert p.total_pnl == Decimal("2.50")
+    assert not p.holds_market("m1")
+    assert p.get_position("m1") is None
+
+
+def test_get_position_returns_active_position():
+    p = Portfolio(max_daily_trades=10, max_daily_loss_usdc=Decimal("10"))
+    assert p.get_position("m1") is None
+    p.apply_fill(_fill())
+    pos = p.get_position("m1")
+    assert pos is not None
+    assert pos.market_id == "m1"
+    assert pos.side == "up"

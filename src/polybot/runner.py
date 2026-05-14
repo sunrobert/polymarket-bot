@@ -40,9 +40,18 @@ async def run_loop(
                 log.debug("halted: skipping snapshot for %s", event.market_id)
                 continue
 
-            intent = strategy.decide(
-                event, holds_market=portfolio.holds_market(event.market_id)
-            )
+            position = portfolio.get_position(event.market_id)
+            # Strategies that don't care about `position` ignore the kwarg.
+            try:
+                intent = strategy.decide(
+                    event,
+                    holds_market=position is not None,
+                    position=position,
+                )
+            except TypeError:
+                intent = strategy.decide(
+                    event, holds_market=position is not None
+                )
             if intent is None:
                 continue
             recorder.record_intent(intent)
@@ -53,7 +62,8 @@ async def run_loop(
             recorder.record_fill(fill)
             portfolio.apply_fill(fill)
             log.info(
-                "filled %s %s shares @ %s on %s",
+                "%s %s %s shares @ %s on %s",
+                "sold" if fill.action == "sell" else "filled",
                 fill.side,
                 fill.shares,
                 fill.avg_price,

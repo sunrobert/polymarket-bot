@@ -83,3 +83,65 @@ async def test_book_too_thin_to_fill_returns_none():
         intent_id="i5", market_id="m1", side="up", notional_usdc=Decimal("1.00")
     )
     assert await ex.submit(intent) is None
+
+
+async def test_sell_fills_at_implied_bid():
+    # Down ask at $0.45 implies Up bid at $0.55. Selling 10 Up shares should
+    # fill at $0.55 against 1000 size of liquidity.
+    ex = PaperExecutor()
+    snap = _snap_with_up_asks([("0.55", "1000")])
+    # Override down asks via re-using helper: build a fresh snapshot.
+    snap = MarketSnapshot(
+        market_id="m1",
+        timestamp=_ts(),
+        time_to_resolve_s=5,
+        up_token_id="u",
+        down_token_id="d",
+        up_best_ask=Decimal("0.55"),
+        up_best_ask_size=Decimal("1000"),
+        down_best_ask=Decimal("0.45"),
+        down_best_ask_size=Decimal("1000"),
+        up_asks=[BookLevel(price=Decimal("0.55"), size=Decimal("1000"))],
+        down_asks=[BookLevel(price=Decimal("0.45"), size=Decimal("1000"))],
+    )
+    ex.on_snapshot(snap)
+    intent = TradeIntent(
+        intent_id="s1",
+        market_id="m1",
+        side="up",
+        notional_usdc=Decimal("0"),
+        action="sell",
+        shares=Decimal("10"),
+    )
+    fill = await ex.submit(intent)
+    assert fill is not None
+    assert fill.action == "sell"
+    assert fill.shares == Decimal("10")
+    assert fill.avg_price == Decimal("0.55")
+
+
+async def test_sell_no_book_returns_none():
+    ex = PaperExecutor()
+    snap = MarketSnapshot(
+        market_id="m1",
+        timestamp=_ts(),
+        time_to_resolve_s=5,
+        up_token_id="u",
+        down_token_id="d",
+        up_best_ask=None,
+        up_best_ask_size=None,
+        down_best_ask=None,
+        down_best_ask_size=None,
+        up_asks=[],
+        down_asks=[],
+    )
+    ex.on_snapshot(snap)
+    intent = TradeIntent(
+        intent_id="s2",
+        market_id="m1",
+        side="up",
+        notional_usdc=Decimal("0"),
+        action="sell",
+        shares=Decimal("10"),
+    )
+    assert await ex.submit(intent) is None

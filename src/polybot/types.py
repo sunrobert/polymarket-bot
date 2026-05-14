@@ -47,12 +47,18 @@ class ResolutionEvent:
 FeedEvent = Union[MarketSnapshot, ResolutionEvent]
 
 
+Action = Literal["buy", "sell"]
+
+
 @dataclass(frozen=True)
 class TradeIntent:
     intent_id: str
     market_id: str
     side: Side
     notional_usdc: Decimal
+    action: Action = "buy"
+    # For sells, optional shares-to-close. None means close full position.
+    shares: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -63,6 +69,7 @@ class Fill:
     shares: Decimal
     avg_price: Decimal
     timestamp: datetime
+    action: Action = "buy"
 
 
 @dataclass
