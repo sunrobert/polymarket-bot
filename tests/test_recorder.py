@@ -55,7 +55,7 @@ def test_records_each_event_as_one_line(tmp_path: Path):
     assert len(files) == 1
     lines = files[0].read_text().splitlines()
     assert len(lines) == 4
-    parsed = [json.loads(l) for l in lines]
+    parsed = [json.loads(line) for line in lines]
     assert parsed[0]["type"] == "snapshot"
     assert parsed[0]["up_best_ask"] == "0.90"
     assert parsed[1]["type"] == "intent"

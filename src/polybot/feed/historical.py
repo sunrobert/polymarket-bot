@@ -33,12 +33,12 @@ def _parse_snapshot(raw: dict) -> MarketSnapshot:
         if raw.get("down_best_ask_size")
         else None,
         up_asks=[
-            BookLevel(price=Decimal(l["price"]), size=Decimal(l["size"]))
-            for l in raw.get("up_asks", [])
+            BookLevel(price=Decimal(lvl["price"]), size=Decimal(lvl["size"]))
+            for lvl in raw.get("up_asks", [])
         ],
         down_asks=[
-            BookLevel(price=Decimal(l["price"]), size=Decimal(l["size"]))
-            for l in raw.get("down_asks", [])
+            BookLevel(price=Decimal(lvl["price"]), size=Decimal(lvl["size"]))
+            for lvl in raw.get("down_asks", [])
         ],
     )
 
