@@ -1,0 +1,69 @@
+"""Core data types. Decimal everywhere for money. No I/O lives here."""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from decimal import Decimal
+from typing import Literal, Union
+
+Side = Literal["up", "down"]
+
+
+@dataclass(frozen=True)
+class BookLevel:
+    price: Decimal
+    size: Decimal
+
+
+@dataclass(frozen=True)
+class MarketSnapshot:
+    market_id: str
+    timestamp: datetime
+    time_to_resolve_s: float
+    up_token_id: str
+    down_token_id: str
+    up_best_ask: Decimal | None
+    up_best_ask_size: Decimal | None
+    down_best_ask: Decimal | None
+    down_best_ask_size: Decimal | None
+    up_asks: list[BookLevel] = field(default_factory=list)
+    down_asks: list[BookLevel] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ResolutionEvent:
+    market_id: str
+    timestamp: datetime
+    winning_side: Side
+
+
+FeedEvent = Union[MarketSnapshot, ResolutionEvent]
+
+
+@dataclass(frozen=True)
+class TradeIntent:
+    intent_id: str
+    market_id: str
+    side: Side
+    notional_usdc: Decimal
+
+
+@dataclass(frozen=True)
+class Fill:
+    intent_id: str
+    market_id: str
+    side: Side
+    shares: Decimal
+    avg_price: Decimal
+    timestamp: datetime
+
+
+@dataclass
+class Position:
+    market_id: str
+    side: Side
+    shares: Decimal
+    cost_usdc: Decimal
+    opened_at: datetime
+    resolved: bool = False
+    pnl_usdc: Decimal | None = None
