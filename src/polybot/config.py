@@ -39,7 +39,7 @@ class FeedConfig(BaseModel):
     gamma_url: str
     clob_ws_url: str
     clob_rest_url: str
-    market_slug_substring: str
+    series_slug: str
     heartbeat_interval_s: float = Field(gt=0)
     resolution_poll_interval_s: float = Field(gt=0)
 

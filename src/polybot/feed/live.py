@@ -46,48 +46,71 @@ class LiveFeed:
     async def _discover_active_market(
         self, http: httpx.AsyncClient
     ) -> dict[str, Any] | None:
-        # Gamma API: /markets?active=true&closed=false&limit=100
-        # Filter by slug substring. Slug pattern for recurring markets has historically
-        # looked like: bitcoin-up-or-down-may-14-2026-12pm-et. Adjust as needed.
-        url = f"{self._cfg.gamma_url}/markets"
-        params = {"active": "true", "closed": "false", "limit": 100}
+        # Filter Gamma /events by series_slug (canonical Polymarket id for the
+        # recurring run) and pick the next event whose endDate is in the future.
+        # This is more robust than a slug-substring scan, which gets swamped
+        # by old never-resolved events when sorting by endDate.
+        url = f"{self._cfg.gamma_url}/events"
+        params = {
+            "series_slug": self._cfg.series_slug,
+            "closed": "false",
+            "limit": 100,
+            "order": "endDate",
+            "ascending": "true",
+        }
         resp = await http.get(url, params=params)
         resp.raise_for_status()
+        now = datetime.now(timezone.utc)
         for raw in resp.json():
-            slug = raw.get("slug", "")
-            if self._cfg.market_slug_substring in slug:
-                parsed = self._parse_market(raw)
-                if parsed is not None:
-                    return parsed
+            parsed = self._parse_event(raw)
+            if parsed is None:
+                continue
+            if parsed["end"] is None or parsed["end"] <= now:
+                continue
+            return parsed
         return None
 
-    def _parse_market(self, raw: dict[str, Any]) -> dict[str, Any] | None:
-        # Expect two outcome tokens; map them to up/down by name.
-        outcomes = raw.get("outcomes", [])
+    def _parse_event(self, raw: dict[str, Any]) -> dict[str, Any] | None:
+        # 5-min markets come back as Gamma "events" with a single inner market.
+        # Pull tokens/outcomes from the inner market — they're JSON-encoded strings.
+        markets = raw.get("markets") or []
+        if not markets:
+            log.warning("event %s has no inner markets", raw.get("slug"))
+            return None
+        m = markets[0]
+
+        outcomes = m.get("outcomes")
+        token_ids = m.get("clobTokenIds")
+        if isinstance(outcomes, str):
+            try:
+                outcomes = json.loads(outcomes)
+            except json.JSONDecodeError:
+                outcomes = []
+        if isinstance(token_ids, str):
+            try:
+                token_ids = json.loads(token_ids)
+            except json.JSONDecodeError:
+                token_ids = []
+
         up_id = down_id = None
-        if outcomes and "clobTokenIds" in raw:
-            token_map = dict(zip(outcomes, raw["clobTokenIds"]))
+        if outcomes and token_ids and len(outcomes) == len(token_ids):
+            token_map = {name: tid for name, tid in zip(outcomes, token_ids)}
             up_id = token_map.get("Up") or token_map.get("up")
             down_id = token_map.get("Down") or token_map.get("down")
-        else:
-            tokens = raw.get("tokens") or []
-            for t in tokens:
-                name = (t.get("outcome") or t.get("name") or "").lower()
-                if name == "up":
-                    up_id = t.get("token_id") or t.get("id")
-                elif name == "down":
-                    down_id = t.get("token_id") or t.get("id")
         if not up_id or not down_id:
-            log.warning("could not extract up/down token ids from market %s", raw.get("id"))
+            log.warning("could not extract up/down token ids from event %s", raw.get("slug"))
             return None
-        end_iso = raw.get("endDateIso") or raw.get("end_date_iso") or raw.get("endDate")
+
+        end_iso = m.get("endDate") or raw.get("endDate")
         end_dt = (
             datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
             if end_iso
             else None
         )
         return {
-            "id": raw.get("id") or raw.get("conditionId"),
+            "id": m.get("conditionId") or m.get("id") or raw.get("id"),
+            "gamma_market_id": m.get("id"),  # numeric, used for /markets/<id> polling
+            "outcomes": outcomes,  # ["Up","Down"] order for outcomePrices indexing
             "slug": raw.get("slug"),
             "up_token_id": str(up_id),
             "down_token_id": str(down_id),
@@ -196,17 +219,20 @@ class LiveFeed:
             hb_handle.cancel()
             ws_handle.cancel()
 
-        # Poll for resolution.
-        while True:
+        # Poll for resolution via /markets/<numeric_id>. Resolution publishes as
+        # outcomePrices ["1","0"] (Up wins) or ["0","1"] (Down wins).
+        gamma_id = market.get("gamma_market_id")
+        outcomes_order = market.get("outcomes") or ["Up", "Down"]
+        while gamma_id is not None:
             await asyncio.sleep(self._cfg.resolution_poll_interval_s)
             try:
                 resp = await http.get(
-                    f"{self._cfg.gamma_url}/markets/{market_id}"
+                    f"{self._cfg.gamma_url}/markets/{gamma_id}"
                 )
                 resp.raise_for_status()
                 raw = resp.json()
                 if raw.get("closed") or raw.get("resolved"):
-                    winning_side = _winning_side(raw)
+                    winning_side = _winning_side(raw, outcomes_order)
                     if winning_side is not None:
                         yield ResolutionEvent(
                             market_id=market_id,
@@ -254,18 +280,35 @@ def _apply_book(side_state: dict, msg: dict) -> None:
         side_state["size"] = None
 
 
-def _winning_side(raw: dict) -> str | None:
-    # Try common shapes for resolution payloads.
+def _winning_side(raw: dict, outcomes_order: list[str]) -> str | None:
+    # Polymarket publishes resolution via outcomePrices: ["1","0"] or ["0","1"]
+    # indexed by outcomes order. Fall back to payouts / winning_outcome for safety.
+    prices = raw.get("outcomePrices")
+    if isinstance(prices, str):
+        try:
+            prices = json.loads(prices)
+        except json.JSONDecodeError:
+            prices = None
+    if prices and len(prices) == len(outcomes_order):
+        for price, name in zip(prices, outcomes_order):
+            try:
+                p = float(price)
+            except (TypeError, ValueError):
+                continue
+            if p >= 0.99:  # 1.0 means this outcome resolved true
+                n = name.lower()
+                if n in ("up", "down"):
+                    return n
+
     outcome = raw.get("winning_outcome") or raw.get("winningOutcome")
     if isinstance(outcome, str):
         o = outcome.lower()
         if o in ("up", "down"):
             return o
-    # Payouts: [1, 0] vs [0, 1] indexed by outcome order.
+
     payouts = raw.get("payouts") or raw.get("payoutNumerators")
-    outcomes = raw.get("outcomes")
-    if payouts and outcomes and len(payouts) == len(outcomes):
-        for payout, name in zip(payouts, outcomes):
+    if payouts and len(payouts) == len(outcomes_order):
+        for payout, name in zip(payouts, outcomes_order):
             try:
                 p = float(payout)
             except (TypeError, ValueError):

@@ -20,7 +20,7 @@ feed:
   gamma_url: https://gamma-api.polymarket.com
   clob_ws_url: wss://ws-subscriptions-clob.polymarket.com/ws/market
   clob_rest_url: https://clob.polymarket.com
-  market_slug_substring: bitcoin-up-or-down
+  series_slug: btc-up-or-down-5m
   heartbeat_interval_s: 1.0
   resolution_poll_interval_s: 5.0
 """
@@ -37,7 +37,7 @@ def test_load_config_parses_decimal(tmp_path: Path):
     assert cfg.risk.max_daily_trades == 50
     assert cfg.risk.max_daily_loss_usdc == Decimal("10.00")
     assert cfg.recorder.dir == "recordings"
-    assert cfg.feed.market_slug_substring == "bitcoin-up-or-down"
+    assert cfg.feed.series_slug == "btc-up-or-down-5m"
 
 
 def test_load_config_rejects_bad_band(tmp_path: Path):
