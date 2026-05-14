@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, AsyncIterator
 
@@ -27,6 +27,11 @@ from polybot.types import BookLevel, FeedEvent, MarketSnapshot, ResolutionEvent
 
 log = logging.getLogger(__name__)
 
+# Only track markets ending within this horizon. Keeps concurrent WS subscriptions
+# bounded to roughly current + next-in-series.
+TRACK_HORIZON_S = 10 * 60
+DISCOVERY_INTERVAL_S = 15
+
 
 class LiveFeed:
     def __init__(self, cfg: FeedConfig) -> None:
@@ -34,22 +39,47 @@ class LiveFeed:
 
     async def events(self) -> AsyncIterator[FeedEvent]:
         async with httpx.AsyncClient(timeout=10.0) as http:
-            while True:
-                market = await self._discover_active_market(http)
-                if market is None:
-                    log.warning("no active market found; retrying in 10s")
-                    await asyncio.sleep(10)
-                    continue
-                async for ev in self._stream_market(http, market):
-                    yield ev
+            queue: asyncio.Queue[FeedEvent] = asyncio.Queue()
+            tracked: set[str] = set()
 
-    async def _discover_active_market(
+            async def market_task(market: dict[str, Any]) -> None:
+                try:
+                    async for ev in self._stream_market(http, market):
+                        await queue.put(ev)
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("market task for %s ended: %s", market.get("slug"), exc)
+
+            async def discovery_loop() -> None:
+                while True:
+                    try:
+                        upcoming = await self._fetch_upcoming(http)
+                        for market in upcoming:
+                            mid = market["id"]
+                            if mid in tracked:
+                                continue
+                            tracked.add(mid)
+                            log.info(
+                                "tracking %s (ends %s)",
+                                market.get("slug"),
+                                market.get("end"),
+                            )
+                            asyncio.create_task(market_task(market))
+                    except Exception as exc:  # noqa: BLE001
+                        log.warning("discovery failed: %s", exc)
+                    await asyncio.sleep(DISCOVERY_INTERVAL_S)
+
+            disc = asyncio.create_task(discovery_loop())
+            try:
+                while True:
+                    ev = await queue.get()
+                    yield ev
+            finally:
+                disc.cancel()
+
+    async def _fetch_upcoming(
         self, http: httpx.AsyncClient
-    ) -> dict[str, Any] | None:
-        # Filter Gamma /events by series_slug (canonical Polymarket id for the
-        # recurring run) and pick the next event whose endDate is in the future.
-        # This is more robust than a slug-substring scan, which gets swamped
-        # by old never-resolved events when sorting by endDate.
+    ) -> list[dict[str, Any]]:
+        # All upcoming events in the series with endDate within TRACK_HORIZON_S.
         url = f"{self._cfg.gamma_url}/events"
         params = {
             "series_slug": self._cfg.series_slug,
@@ -61,14 +91,18 @@ class LiveFeed:
         resp = await http.get(url, params=params)
         resp.raise_for_status()
         now = datetime.now(timezone.utc)
+        horizon = now + timedelta(seconds=TRACK_HORIZON_S)
+        results: list[dict[str, Any]] = []
         for raw in resp.json():
             parsed = self._parse_event(raw)
             if parsed is None:
                 continue
             if parsed["end"] is None or parsed["end"] <= now:
                 continue
-            return parsed
-        return None
+            if parsed["end"] > horizon:
+                break  # list is endDate-ascending, no point looking further
+            results.append(parsed)
+        return results
 
     def _parse_event(self, raw: dict[str, Any]) -> dict[str, Any] | None:
         # 5-min markets come back as Gamma "events" with a single inner market.
