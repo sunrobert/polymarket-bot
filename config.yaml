@@ -37,6 +37,13 @@ bot4_rallyfader:
   exit_price: 0.55
   trade_size_usdc: 5.00
 
+bot5_bothsides:
+  # Bot 5: Bot 3 + Bot 4 unified. Buys whichever side dips to entry_price first,
+  # sells when that side's implied bid recovers to exit_price.
+  entry_price: 0.35
+  exit_price: 0.55
+  trade_size_usdc: 5.00
+
 risk:
   max_daily_trades: 50
   max_daily_loss_usdc: 10.00

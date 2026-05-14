@@ -7,6 +7,7 @@ from polybot.strategy.bot2_filter import Bot2FilterStrategy
 from polybot.strategy.bot2_signal import Bot2SignalStrategy
 from polybot.strategy.bot3_dipbuyer import Bot3DipBuyerStrategy
 from polybot.strategy.bot4_rallyfader import Bot4RallyFaderStrategy
+from polybot.strategy.bot5_bothsides import Bot5BothSidesStrategy
 
 
 def make_strategy(name: str, cfg: Config):
@@ -54,8 +55,24 @@ def make_strategy(name: str, cfg: Config):
             exit_price=b4.exit_price,
             trade_size_usdc=b4.trade_size_usdc,
         )
+    if name == "bot5_bothsides":
+        b5 = cfg.bot5_bothsides
+        if b5 is None:
+            raise ValueError("bot5_bothsides selected but config.bot5_bothsides is missing")
+        return Bot5BothSidesStrategy(
+            entry_price=b5.entry_price,
+            exit_price=b5.exit_price,
+            trade_size_usdc=b5.trade_size_usdc,
+        )
     raise ValueError(f"unknown strategy: {name}")
 
 
-BOT_NAMES = ("bot1", "bot2_filter", "bot2_signal", "bot3_dipbuyer", "bot4_rallyfader")
+BOT_NAMES = (
+    "bot1",
+    "bot2_filter",
+    "bot2_signal",
+    "bot3_dipbuyer",
+    "bot4_rallyfader",
+    "bot5_bothsides",
+)
 BOTS_NEEDING_BTC_FEED = ("bot2_filter", "bot2_signal")
