@@ -13,6 +13,16 @@ Paper trader and backtester for Polymarket's recurring 5-minute Bitcoin
 | `bot2_filter` | Same trade shape as Bot 1 but only fires when BTC direction (from Coinbase) agrees with the in-band side. Safer than Bot 1. Likely still ~zero EV. | Yes |
 | `bot2_signal` | Computes a fair-value `p(up wins)` from BTC move + time remaining, trades when fair value disagrees with market ask by `min_edge`. The version with plausible alpha. | Yes |
 
+## Empirical Findings
+
+Both `bot1` and `bot2_signal` have been paper-traded against live Polymarket data and exhibit negative expected value at their current parameterizations.
+
+**Bot 1** demonstrates a structural rather than statistical failure: purchasing assets at prices the order book has already calibrated to near-certainty yields approximately zero pre-fee EV. Two paper sessions of 13 trades each produced realized hit rates above 90% but cumulative P&L of −$0.92 and −$0.70 respectively. The win/loss-magnitude asymmetry (gains of $0.01–$0.15, losses of $0.85–$0.99) is sufficient on its own to drive the strategy negative; the strategy is retained as a baseline for order-book-only momentum.
+
+**Bot 2 (`bot2_signal`)** tested the hypothesis that the Polymarket book lags Coinbase BTC/USD movements within five-minute windows. Across six trades the realized hit rate was 33% (2W / 4L), with cumulative P&L of −$2.17. Three contributing factors were identified: an overconfident volatility prior (`sigma_per_sec_bps = 1.5`), temporal and instrumental misalignment between the Coinbase reference price and the Chainlink resolution oracle, and an asymmetric risk profile on tail-priced entries that requires hit rates well above 50% to break even. The hypothesis is not falsified at six trades but cannot be considered supported at the current parameter values.
+
+Full analysis: [`docs/bot-postmortems.md`](docs/bot-postmortems.md).
+
 ## Setup
 
     python -m venv .venv
