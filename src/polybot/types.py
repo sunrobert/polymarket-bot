@@ -59,6 +59,11 @@ class TradeIntent:
     action: Action = "buy"
     # For sells, optional shares-to-close. None means close full position.
     shares: Decimal | None = None
+    # Optional price cap. For buys: refuse fills above limit_price.
+    # For sells: refuse fills below limit_price. Mimics a Limit GTC order —
+    # partial fills are allowed and unfilled remainder is dropped (we'd model
+    # a resting order if we needed to). None means market-style book walking.
+    limit_price: Decimal | None = None
 
 
 @dataclass(frozen=True)

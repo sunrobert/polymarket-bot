@@ -47,6 +47,7 @@ class Bot3DipBuyerStrategy:
                     notional_usdc=Decimal("0"),
                     action="sell",
                     shares=position.shares,
+                    limit_price=self.exit_price,
                 )
             return None
 
@@ -63,4 +64,5 @@ class Bot3DipBuyerStrategy:
             side="up",
             notional_usdc=self.trade_size_usdc,
             action="buy",
+            limit_price=self.entry_price,
         )

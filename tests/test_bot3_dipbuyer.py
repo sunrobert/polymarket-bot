@@ -47,6 +47,7 @@ def test_buys_up_when_ask_at_entry():
     assert intent.action == "buy"
     assert intent.side == "up"
     assert intent.notional_usdc == Decimal("5.00")
+    assert intent.limit_price == Decimal("0.35")
 
 
 def test_buys_up_when_ask_below_entry():
@@ -73,6 +74,7 @@ def test_sells_when_implied_bid_at_exit():
     assert intent.action == "sell"
     assert intent.side == "up"
     assert intent.shares == pos.shares
+    assert intent.limit_price == Decimal("0.55")
 
 
 def test_holds_when_implied_bid_below_exit():

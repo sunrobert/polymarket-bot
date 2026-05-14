@@ -39,6 +39,10 @@ class PaperExecutor:
         for level in asks:
             if remaining <= 0:
                 break
+            # Limit-price enforcement: refuse to pay more than limit_price.
+            # Stops walking the book at the first level that would violate.
+            if intent.limit_price is not None and level.price > intent.limit_price:
+                break
             level_notional = level.price * level.size
             levels_touched += 1
             last_price = level.price
@@ -52,8 +56,12 @@ class PaperExecutor:
             total_cost += level_notional
             remaining -= level_notional
 
-        if remaining > 0:
-            # Not enough liquidity to fill the intent at any price.
+        if intent.limit_price is not None:
+            # Limit orders: any partial fill within limit is a fill.
+            if total_shares <= 0:
+                return None
+        elif remaining > 0:
+            # Market orders: all-or-nothing.
             return None
 
         # If only one level was touched, avg_price is exactly that level's price.
@@ -93,6 +101,9 @@ class PaperExecutor:
             bid_price = Decimal("1") - level.price
             if bid_price <= 0:
                 continue
+            # Limit-price enforcement: refuse to sell below limit_price.
+            if intent.limit_price is not None and bid_price < intent.limit_price:
+                break
             bid_size = level.size
             levels_touched += 1
             last_price = bid_price

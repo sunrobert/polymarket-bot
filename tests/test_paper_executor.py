@@ -120,6 +120,88 @@ async def test_sell_fills_at_implied_bid():
     assert fill.avg_price == Decimal("0.55")
 
 
+async def test_buy_with_limit_price_stops_at_threshold():
+    # Top level 5 sh @ $0.30 ($1.50 of liquidity). Next level $0.45.
+    # Intent $5 with limit $0.35: should fill 5 sh @ $0.30 = $1.50, partial fill.
+    ex = PaperExecutor()
+    snap = _snap_with_up_asks([("0.30", "5"), ("0.45", "100")])
+    ex.on_snapshot(snap)
+    intent = TradeIntent(
+        intent_id="l1",
+        market_id="m1",
+        side="up",
+        notional_usdc=Decimal("5.00"),
+        limit_price=Decimal("0.35"),
+    )
+    fill = await ex.submit(intent)
+    assert fill is not None
+    assert fill.shares == Decimal("5")
+    assert fill.avg_price == Decimal("0.30")
+
+
+async def test_buy_with_limit_price_rejects_when_no_acceptable_level():
+    ex = PaperExecutor()
+    # Best ask $0.40, limit $0.35 → no fill.
+    snap = _snap_with_up_asks([("0.40", "1000")])
+    ex.on_snapshot(snap)
+    intent = TradeIntent(
+        intent_id="l2",
+        market_id="m1",
+        side="up",
+        notional_usdc=Decimal("5.00"),
+        limit_price=Decimal("0.35"),
+    )
+    assert await ex.submit(intent) is None
+
+
+async def test_buy_with_limit_price_fills_full_size_when_top_level_fat():
+    # Top level has plenty at $0.35, limit $0.35 → full fill at $0.35.
+    ex = PaperExecutor()
+    snap = _snap_with_up_asks([("0.35", "1000")])
+    ex.on_snapshot(snap)
+    intent = TradeIntent(
+        intent_id="l3",
+        market_id="m1",
+        side="up",
+        notional_usdc=Decimal("5.00"),
+        limit_price=Decimal("0.35"),
+    )
+    fill = await ex.submit(intent)
+    assert fill is not None
+    assert fill.avg_price == Decimal("0.35")
+    # $5 / 0.35 ≈ 14.286 shares
+    assert fill.shares == Decimal("5") / Decimal("0.35")
+
+
+async def test_sell_with_limit_price_rejects_when_bid_too_low():
+    # Down ask $0.50 → implied Up bid $0.50. Limit $0.55 → no fill.
+    ex = PaperExecutor()
+    snap = MarketSnapshot(
+        market_id="m1",
+        timestamp=_ts(),
+        time_to_resolve_s=5,
+        up_token_id="u",
+        down_token_id="d",
+        up_best_ask=Decimal("0.50"),
+        up_best_ask_size=Decimal("1000"),
+        down_best_ask=Decimal("0.50"),
+        down_best_ask_size=Decimal("1000"),
+        up_asks=[BookLevel(price=Decimal("0.50"), size=Decimal("1000"))],
+        down_asks=[BookLevel(price=Decimal("0.50"), size=Decimal("1000"))],
+    )
+    ex.on_snapshot(snap)
+    intent = TradeIntent(
+        intent_id="l4",
+        market_id="m1",
+        side="up",
+        notional_usdc=Decimal("0"),
+        action="sell",
+        shares=Decimal("10"),
+        limit_price=Decimal("0.55"),
+    )
+    assert await ex.submit(intent) is None
+
+
 async def test_sell_no_book_returns_none():
     ex = PaperExecutor()
     snap = MarketSnapshot(
