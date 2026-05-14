@@ -81,7 +81,8 @@ src/polybot/
 │   ├── bot1.py           # Late-window favorite buyer
 │   ├── bot2_filter.py    # Bot 1 + BTC direction gate
 │   ├── bot2_signal.py    # BTC-derived fair value vs market ask
-│   └── bot3_dipbuyer.py  # Mean-reversion entry + exit
+│   ├── bot3_dipbuyer.py  # Mean-reversion entry + exit (Up side)
+│   └── bot4_rallyfader.py # Pessimistic mirror of bot3 (Down side)
 ├── executor/
 │   ├── base.py           # Executor protocol
 │   └── paper.py          # Walks the in-memory book; synthetic bids for sells
@@ -139,6 +140,7 @@ The runner records every snapshot, intent, fill, and resolution to JSONL so a se
 | `bot2_filter` | Bot 1 + only fire if BTC direction agrees with the in-band side. | Yes | Inherits Bot 1's no-edge profile |
 | `bot2_signal` | Compute fair `p(up wins)` from BTC move + time-to-close (normal CDF); trade when fair value disagrees with market ask by `min_edge`. | Yes | Net negative at current σ |
 | `bot3_dipbuyer` | Enter Up when ask ≤ $0.35, exit when implied bid ≥ $0.55. Mean-reversion / overreaction-bounce play. | No | Active testing |
+| `bot4_rallyfader` | Pessimistic mirror of Bot 3. Enter Down when Down ask ≤ $0.35 (Up has rallied hard), exit when implied Down bid ≥ $0.55. | No | Active testing |
 
 Each strategy is a pure function: `decide(snapshot, holds_market, position) -> TradeIntent | None`. No I/O, no globals. The same code runs in paper, backtest, and (eventually) live.
 
@@ -181,6 +183,7 @@ python scripts/run_paper.py --bot bot1
 python scripts/run_paper.py --bot bot2_filter
 python scripts/run_paper.py --bot bot2_signal
 python scripts/run_paper.py --bot bot3_dipbuyer
+python scripts/run_paper.py --bot bot4_rallyfader
 ```
 
 Each bot writes its recording to `recordings/<bot>/YYYY-MM-DD.jsonl`. Bots can run in parallel tabs without overwriting each other.

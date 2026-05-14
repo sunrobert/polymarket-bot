@@ -25,6 +25,10 @@ bot3_dipbuyer:
   entry_price: 0.35
   exit_price: 0.55
   trade_size_usdc: 5.00
+bot4_rallyfader:
+  entry_price: 0.35
+  exit_price: 0.55
+  trade_size_usdc: 5.00
 risk:
   max_daily_trades: 50
   max_daily_loss_usdc: 10.00

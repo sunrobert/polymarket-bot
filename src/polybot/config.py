@@ -57,6 +57,23 @@ class Bot3DipBuyerConfig(BaseModel):
         return self
 
 
+class Bot4RallyFaderConfig(BaseModel):
+    entry_price: Decimal
+    exit_price: Decimal
+    trade_size_usdc: Decimal
+
+    @model_validator(mode="after")
+    def _ordered(self) -> "Bot4RallyFaderConfig":
+        if self.entry_price <= 0 or self.entry_price >= self.exit_price:
+            raise ValueError(
+                f"need 0 < entry_price < exit_price, got "
+                f"{self.entry_price}/{self.exit_price}"
+            )
+        if self.trade_size_usdc <= 0:
+            raise ValueError("trade_size_usdc must be > 0")
+        return self
+
+
 class RiskConfig(BaseModel):
     max_daily_trades: int = Field(gt=0)
     max_daily_loss_usdc: Decimal = Field(gt=0)
@@ -83,6 +100,7 @@ class Config(BaseModel):
     bot2_filter: Bot2FilterConfig | None = None
     bot2_signal: Bot2SignalConfig | None = None
     bot3_dipbuyer: Bot3DipBuyerConfig | None = None
+    bot4_rallyfader: Bot4RallyFaderConfig | None = None
 
 
 def load_config(path: Path | str) -> Config:
