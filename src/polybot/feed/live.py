@@ -22,6 +22,7 @@ from typing import Any, AsyncIterator
 import httpx
 import websockets
 
+from polybot.btc_feed import CoinbasePriceFeed
 from polybot.config import FeedConfig
 from polybot.types import BookLevel, FeedEvent, MarketSnapshot, ResolutionEvent
 
@@ -34,15 +35,37 @@ DISCOVERY_INTERVAL_S = 15
 
 
 class LiveFeed:
-    def __init__(self, cfg: FeedConfig) -> None:
+    def __init__(
+        self,
+        cfg: FeedConfig,
+        btc_feed: CoinbasePriceFeed | None = None,
+    ) -> None:
         self._cfg = cfg
+        # When btc_feed is provided, snapshots include btc_price / btc_open_price
+        # so Bot 2 can act on external BTC reference. Bot 1 doesn't need it.
+        self._btc_feed = btc_feed
+        # Frozen open price per market_id, looked up once when the market is
+        # first tracked (via Coinbase historical candle around eventStartTime).
+        self._open_prices: dict[str, Decimal | None] = {}
 
     async def events(self) -> AsyncIterator[FeedEvent]:
         async with httpx.AsyncClient(timeout=10.0) as http:
+            if self._btc_feed is not None:
+                await self._btc_feed.start()
             queue: asyncio.Queue[FeedEvent] = asyncio.Queue()
             tracked: set[str] = set()
 
             async def market_task(market: dict[str, Any]) -> None:
+                # If we have a BTC feed, capture the open price once for this market.
+                if self._btc_feed is not None and market.get("start") is not None:
+                    open_price = await self._btc_feed.historical(market["start"])
+                    self._open_prices[market["id"]] = open_price
+                    log.info(
+                        "btc open price for %s @ %s = %s",
+                        market.get("slug"),
+                        market["start"].isoformat(),
+                        open_price,
+                    )
                 try:
                     async for ev in self._stream_market(http, market):
                         await queue.put(ev)
@@ -75,6 +98,8 @@ class LiveFeed:
                     yield ev
             finally:
                 disc.cancel()
+                if self._btc_feed is not None:
+                    await self._btc_feed.stop()
 
     async def _fetch_upcoming(
         self, http: httpx.AsyncClient
@@ -141,6 +166,16 @@ class LiveFeed:
             if end_iso
             else None
         )
+        start_iso = (
+            m.get("eventStartTime")
+            or raw.get("startTime")
+            or raw.get("eventStartTime")
+        )
+        start_dt = (
+            datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
+            if start_iso
+            else None
+        )
         return {
             "id": m.get("conditionId") or m.get("id") or raw.get("id"),
             "gamma_market_id": m.get("id"),  # numeric, used for /markets/<id> polling
@@ -149,6 +184,7 @@ class LiveFeed:
             "up_token_id": str(up_id),
             "down_token_id": str(down_id),
             "end": end_dt,
+            "start": start_dt,
         }
 
     async def _stream_market(
@@ -167,6 +203,8 @@ class LiveFeed:
         def make_snapshot() -> MarketSnapshot:
             now = datetime.now(timezone.utc)
             ttr = (end - now).total_seconds() if end else 0.0
+            btc_price = self._btc_feed.latest() if self._btc_feed else None
+            btc_open = self._open_prices.get(market_id)
             return MarketSnapshot(
                 market_id=market_id,
                 timestamp=now,
@@ -179,6 +217,8 @@ class LiveFeed:
                 down_best_ask_size=state["down"]["size"],
                 up_asks=list(state["up"]["asks"]),
                 down_asks=list(state["down"]["asks"]),
+                btc_price=btc_price,
+                btc_open_price=btc_open,
             )
 
         # Seed both sides with REST book snapshots.

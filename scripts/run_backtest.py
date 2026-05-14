@@ -1,4 +1,13 @@
-"""Replay a recorded session through Bot 1 and print summary P&L."""
+"""Replay a recorded session through the selected bot and print summary P&L.
+
+Usage:
+    python scripts/run_backtest.py recording.jsonl --bot bot1
+    python scripts/run_backtest.py recording.jsonl --bot bot2_filter
+    python scripts/run_backtest.py recording.jsonl --bot bot2_signal
+
+Replay output is written to recordings/<bot>/replay-<date>.jsonl so it doesn't
+collide with live recordings.
+"""
 from __future__ import annotations
 
 import argparse
@@ -13,12 +22,18 @@ from polybot.feed.historical import HistoricalFeed
 from polybot.portfolio import Portfolio
 from polybot.recorder import Recorder
 from polybot.runner import run_loop
-from polybot.strategy.bot1 import Bot1Strategy
+from polybot.strategy import BOT_NAMES, make_strategy
 
 
 async def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("recording", type=Path, help="JSONL recording to replay")
+    parser.add_argument(
+        "--bot",
+        choices=BOT_NAMES,
+        default="bot1",
+        help="which strategy to run",
+    )
     parser.add_argument(
         "--config", type=Path, default=Path("config.yaml"), help="config file"
     )
@@ -30,17 +45,14 @@ async def main() -> int:
     cfg = load_config(args.config)
 
     feed = HistoricalFeed(args.recording)
-    strategy = Bot1Strategy(
-        price_band=cfg.strategy.price_band,
-        time_window_s=cfg.strategy.time_window_s,
-        trade_size_usdc=cfg.strategy.trade_size_usdc,
-    )
+    strategy = make_strategy(args.bot, cfg)
     executor = PaperExecutor()
     portfolio = Portfolio(
         max_daily_trades=cfg.risk.max_daily_trades,
         max_daily_loss_usdc=cfg.risk.max_daily_loss_usdc,
     )
-    with Recorder(dir=cfg.recorder.dir) as recorder:
+    recordings_dir = Path(cfg.recorder.dir) / args.bot / "replays"
+    with Recorder(dir=recordings_dir) as recorder:
         await run_loop(
             feed=feed,
             strategy=strategy,
@@ -49,7 +61,7 @@ async def main() -> int:
             recorder=recorder,
         )
 
-    print("=== Backtest done ===")
+    print(f"=== Backtest done [{args.bot}] ===")
     print(f"trades:    {portfolio.day_trades}")
     print(f"day P&L:   {portfolio.day_pnl}")
     print(f"total P&L: {portfolio.total_pnl}")

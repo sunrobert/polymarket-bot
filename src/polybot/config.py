@@ -26,6 +26,20 @@ class StrategyConfig(BaseModel):
         return self
 
 
+class Bot2FilterConfig(BaseModel):
+    price_band: tuple[Decimal, Decimal]
+    time_window_s: tuple[float, float]
+    trade_size_usdc: Decimal
+
+
+class Bot2SignalConfig(BaseModel):
+    time_window_s: tuple[float, float]
+    trade_size_usdc: Decimal
+    min_edge: Decimal
+    sigma_per_sec_bps: Decimal
+    price_band: tuple[Decimal, Decimal]
+
+
 class RiskConfig(BaseModel):
     max_daily_trades: int = Field(gt=0)
     max_daily_loss_usdc: Decimal = Field(gt=0)
@@ -49,6 +63,8 @@ class Config(BaseModel):
     risk: RiskConfig
     recorder: RecorderConfig
     feed: FeedConfig
+    bot2_filter: Bot2FilterConfig | None = None
+    bot2_signal: Bot2SignalConfig | None = None
 
 
 def load_config(path: Path | str) -> Config:

@@ -11,6 +11,16 @@ strategy:
   price_band: [0.85, 0.99]
   time_window_s: [1, 20]
   trade_size_usdc: 1.00
+bot2_filter:
+  price_band: [0.85, 0.95]
+  time_window_s: [5, 20]
+  trade_size_usdc: 1.00
+bot2_signal:
+  time_window_s: [5, 20]
+  trade_size_usdc: 1.00
+  min_edge: 0.02
+  sigma_per_sec_bps: 1.5
+  price_band: [0.05, 0.99]
 risk:
   max_daily_trades: 50
   max_daily_loss_usdc: 10.00

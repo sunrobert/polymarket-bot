@@ -28,6 +28,13 @@ class MarketSnapshot:
     down_best_ask_size: Decimal | None
     up_asks: list[BookLevel] = field(default_factory=list)
     down_asks: list[BookLevel] = field(default_factory=list)
+    # BTC reference prices for strategies that need an external oracle.
+    # btc_price = latest BTC/USD from Coinbase at snapshot time.
+    # btc_open_price = BTC/USD at the market's eventStartTime (frozen per market).
+    # Both None if the feed wasn't configured to provide them — Bot 1 ignores them,
+    # Bot 2 requires them and skips the snapshot if absent.
+    btc_price: Decimal | None = None
+    btc_open_price: Decimal | None = None
 
 
 @dataclass(frozen=True)

@@ -40,6 +40,8 @@ def _parse_snapshot(raw: dict) -> MarketSnapshot:
             BookLevel(price=Decimal(lvl["price"]), size=Decimal(lvl["size"]))
             for lvl in raw.get("down_asks", [])
         ],
+        btc_price=Decimal(raw["btc_price"]) if raw.get("btc_price") else None,
+        btc_open_price=Decimal(raw["btc_open_price"]) if raw.get("btc_open_price") else None,
     )
 
 
