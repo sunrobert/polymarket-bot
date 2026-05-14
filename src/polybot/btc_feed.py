@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import httpx
@@ -56,9 +56,11 @@ class CoinbasePriceFeed:
         if self._http is None:
             log.warning("historical() called before start()")
             return None
-        # Coinbase wants ISO timestamps; we fetch a 5-minute window centered on ts.
-        start = ts.replace(second=0, microsecond=0)
-        end = start.replace(minute=start.minute)
+        # Coinbase requires start < end. Fetch a 5-minute window straddling ts so
+        # the candle containing ts (and adjacent ones) come back.
+        target = ts.replace(second=0, microsecond=0)
+        start = target - timedelta(minutes=2)
+        end = target + timedelta(minutes=3)
         try:
             resp = await self._http.get(
                 f"{REST_URL}/products/{PRODUCT}/candles",
@@ -78,13 +80,13 @@ class CoinbasePriceFeed:
             return None
         # Each candle: [time, low, high, open, close, volume]. Use open of the candle
         # whose start timestamp matches our target minute (if present).
-        target_unix = int(start.replace(tzinfo=timezone.utc).timestamp())
+        target_unix = int(target.timestamp())
         for candle in candles:
             if int(candle[0]) == target_unix:
                 return Decimal(str(candle[3]))  # open
-        # Fall back to the most recent candle's close as a rough estimate.
-        latest = max(candles, key=lambda c: c[0])
-        return Decimal(str(latest[4]))
+        # Fall back to the closest-in-time candle's open.
+        closest = min(candles, key=lambda c: abs(int(c[0]) - target_unix))
+        return Decimal(str(closest[3]))
 
     async def _run_ws(self) -> None:
         sub_msg = json.dumps(
@@ -93,10 +95,12 @@ class CoinbasePriceFeed:
                 "channels": [{"name": "ticker", "product_ids": [PRODUCT]}],
             }
         )
+        first_price = True
         while True:
             try:
                 async with websockets.connect(WS_URL) as ws:
                     await ws.send(sub_msg)
+                    log.info("coinbase ws connected (BTC-USD ticker)")
                     async for raw in ws:
                         try:
                             msg = json.loads(raw)
@@ -108,6 +112,9 @@ class CoinbasePriceFeed:
                                 try:
                                     self._latest = Decimal(str(price))
                                     self._latest_ts = datetime.now(timezone.utc)
+                                    if first_price:
+                                        log.info("coinbase first BTC price: %s", self._latest)
+                                        first_price = False
                                 except Exception:  # noqa: BLE001
                                     pass
             except asyncio.CancelledError:
