@@ -1,0 +1,5 @@
+{"type":"snapshot","market_id":"m1","timestamp":"2026-05-14T12:00:00+00:00","time_to_resolve_s":15,"up_token_id":"u","down_token_id":"d","up_best_ask":"0.92","up_best_ask_size":"100","down_best_ask":"0.10","down_best_ask_size":"100","up_asks":[{"price":"0.92","size":"100"}],"down_asks":[{"price":"0.10","size":"100"}]}
+{"type":"snapshot","market_id":"m1","timestamp":"2026-05-14T12:00:10+00:00","time_to_resolve_s":5,"up_token_id":"u","down_token_id":"d","up_best_ask":"0.95","up_best_ask_size":"100","down_best_ask":"0.07","down_best_ask_size":"100","up_asks":[{"price":"0.95","size":"100"}],"down_asks":[{"price":"0.07","size":"100"}]}
+{"type":"intent","intent_id":"i1","market_id":"m1","side":"up","notional_usdc":"1.00"}
+{"type":"fill","intent_id":"i1","market_id":"m1","side":"up","shares":"1.0526","avg_price":"0.95","timestamp":"2026-05-14T12:00:10+00:00"}
+{"type":"resolution","market_id":"m1","timestamp":"2026-05-14T12:00:15+00:00","winning_side":"up"}
