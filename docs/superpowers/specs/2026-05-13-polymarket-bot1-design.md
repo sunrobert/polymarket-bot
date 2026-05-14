@@ -73,14 +73,16 @@ Five components wired by a `runner` for each mode.
 
 Interface:
 ```python
+FeedEvent = MarketSnapshot | ResolutionEvent
+
 class DataFeed(Protocol):
-    async def snapshots(self) -> AsyncIterator[MarketSnapshot]: ...
+    async def events(self) -> AsyncIterator[FeedEvent]: ...
 ```
 
-Yields `MarketSnapshot` objects describing the current state of an active market.
+Yields a stream of `FeedEvent`s for active markets. `MarketSnapshot` describes book state at a point in time; `ResolutionEvent` signals that a market has resolved and includes the winning side. All I/O (HTTP, WebSocket) lives in the feed — downstream components never call out.
 
-- **`LiveFeed`** — uses Polymarket Gamma API to discover the active 5-min BTC market, subscribes to the CLOB WebSocket for both outcome tokens, and emits a snapshot whenever the top of book changes (or once per second as a heartbeat so the time-window check still fires when the book is quiet).
-- **`HistoricalFeed`** — reads a recorded JSONL file and yields the same `MarketSnapshot` objects in their original order. Used for backtesting.
+- **`LiveFeed`** — uses Polymarket Gamma API to discover the active 5-min BTC market, subscribes to the CLOB WebSocket for both outcome tokens, and emits a snapshot whenever the top of book changes (or once per second as a heartbeat so the time-window check still fires when the book is quiet). After a market's window ends, polls Gamma every 5–10 seconds until the market reports resolved, then emits a `ResolutionEvent`.
+- **`HistoricalFeed`** — reads a recorded JSONL file and yields the same `FeedEvent` sequence (snapshots and resolutions) in their original order. Used for backtesting.
 
 ### Strategy
 
@@ -105,9 +107,11 @@ class Executor(Protocol):
 
 ### Portfolio
 
+Pure in-memory state. No I/O.
+
 - Tracks open positions per market.
-- Applies fills to positions on submit.
-- On resolution: queries Gamma for the market outcome, marks the winning side's shares to $1.00, the losing side to $0, and finalizes P&L for the trade.
+- Applies fills to positions when the Executor returns one.
+- Consumes `ResolutionEvent`s from the DataFeed: marks the winning side's shares to $1.00, the losing side to $0, and finalizes P&L for the trade.
 - Maintains running totals: daily trade count, daily P&L, total P&L.
 - Enforces kill switches: if `max_daily_trades` or `max_daily_loss_usdc` is breached, the runner stops accepting new intents for the day.
 
@@ -139,6 +143,12 @@ class MarketSnapshot:
     down_best_ask: Decimal | None
     down_best_ask_size: Decimal | None
     # full book levels available for executor's walk-the-book fill model
+
+@dataclass
+class ResolutionEvent:
+    market_id: str
+    timestamp: datetime
+    winning_side: Literal["up", "down"]
 
 @dataclass
 class TradeIntent:
