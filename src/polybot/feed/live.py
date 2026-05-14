@@ -55,17 +55,36 @@ class LiveFeed:
             queue: asyncio.Queue[FeedEvent] = asyncio.Queue()
             tracked: set[str] = set()
 
-            async def market_task(market: dict[str, Any]) -> None:
-                # If we have a BTC feed, capture the open price once for this market.
-                if self._btc_feed is not None and market.get("start") is not None:
-                    open_price = await self._btc_feed.historical(market["start"])
-                    self._open_prices[market["id"]] = open_price
+            async def fetch_open_when_ready(market: dict[str, Any]) -> None:
+                start_time = market.get("start")
+                if start_time is None or self._btc_feed is None:
+                    return
+                # Coinbase only has a candle for a minute after that minute has
+                # closed. Wait until ~1 minute past the market's start before
+                # fetching, otherwise we'll get a 400 for future timestamps.
+                now = datetime.now(timezone.utc)
+                ready_at = start_time + timedelta(seconds=70)
+                if ready_at > now:
+                    delay = (ready_at - now).total_seconds()
                     log.info(
-                        "btc open price for %s @ %s = %s",
+                        "deferring open-price fetch for %s by %.0fs (start=%s)",
                         market.get("slug"),
-                        market["start"].isoformat(),
-                        open_price,
+                        delay,
+                        start_time.isoformat(),
                     )
+                    await asyncio.sleep(delay)
+                open_price = await self._btc_feed.historical(start_time)
+                self._open_prices[market["id"]] = open_price
+                log.info(
+                    "btc open price for %s @ %s = %s",
+                    market.get("slug"),
+                    start_time.isoformat(),
+                    open_price,
+                )
+
+            async def market_task(market: dict[str, Any]) -> None:
+                # Open-price fetch happens in the background — don't block streaming.
+                asyncio.create_task(fetch_open_when_ready(market))
                 try:
                     async for ev in self._stream_market(http, market):
                         await queue.put(ev)
