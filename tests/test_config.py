@@ -33,6 +33,12 @@ bot5_bothsides:
   entry_price: 0.35
   exit_price: 0.55
   trade_size_usdc: 5.00
+bot6_smartdipbuyer:
+  entry_price: 0.35
+  exit_price: 0.55
+  trade_size_usdc: 5.00
+  max_dip_pct: 0.50
+  growth_window: 5
 risk:
   max_daily_trades: 50
   max_daily_loss_usdc: 10.00
