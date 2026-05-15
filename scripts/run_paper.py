@@ -52,11 +52,30 @@ async def main() -> int:
     parser.add_argument(
         "--config", type=Path, default=Path("config.yaml"), help="config file"
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="show all polling/connection logs (default: only trades + PnL)",
+    )
+    parser.add_argument(
+        "--record-snapshots",
+        action="store_true",
+        help="record every snapshot for backtest replay. WARNING: many GB per hour",
+    )
     args = parser.parse_args()
 
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
-    )
+    # Default to a quiet terminal — only trade events and the periodic summary.
+    # `--verbose` brings back the full HTTP/feed log stream.
+    if args.verbose:
+        logging.basicConfig(
+            level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
+        )
+    else:
+        logging.basicConfig(
+            level=logging.WARNING, format="%(asctime)s %(levelname)s %(message)s"
+        )
+        # Trade events live in runner.py — surface those.
+        logging.getLogger("polybot.runner").setLevel(logging.INFO)
     cfg = load_config(args.config)
 
     btc_feed = CoinbasePriceFeed() if args.bot in BOTS_NEEDING_BTC_FEED else None
@@ -69,7 +88,7 @@ async def main() -> int:
     )
 
     recordings_dir = Path(cfg.recorder.dir) / args.bot
-    with Recorder(dir=recordings_dir) as recorder:
+    with Recorder(dir=recordings_dir, record_snapshots=args.record_snapshots) as recorder:
         print(f"[{args.bot}] writing recording to {recorder.path}", flush=True)
         summary = asyncio.create_task(_periodic_summary(portfolio, args.bot))
         try:

@@ -18,7 +18,7 @@ def _ts():
 
 
 def test_records_each_event_as_one_line(tmp_path: Path):
-    rec = Recorder(dir=tmp_path, now=_ts)
+    rec = Recorder(dir=tmp_path, now=_ts, record_snapshots=True)
     snap = MarketSnapshot(
         market_id="m1",
         timestamp=_ts(),
@@ -62,6 +62,39 @@ def test_records_each_event_as_one_line(tmp_path: Path):
     assert parsed[2]["type"] == "fill"
     assert parsed[3]["type"] == "resolution"
     assert parsed[3]["winning_side"] == "up"
+
+
+def test_default_skips_snapshots_to_avoid_bloat(tmp_path: Path):
+    rec = Recorder(dir=tmp_path, now=_ts)  # default record_snapshots=False
+    snap = MarketSnapshot(
+        market_id="m1",
+        timestamp=_ts(),
+        time_to_resolve_s=10,
+        up_token_id="u",
+        down_token_id="d",
+        up_best_ask=Decimal("0.90"),
+        up_best_ask_size=Decimal("100"),
+        down_best_ask=Decimal("0.10"),
+        down_best_ask_size=Decimal("100"),
+        up_asks=[],
+        down_asks=[],
+    )
+    fill = Fill(
+        intent_id="i1",
+        market_id="m1",
+        side="up",
+        shares=Decimal("1"),
+        avg_price=Decimal("0.90"),
+        timestamp=_ts(),
+    )
+    # Spam many snapshots — none should be written.
+    for _ in range(100):
+        rec.record_snapshot(snap)
+    rec.record_fill(fill)
+    rec.close()
+    lines = list(tmp_path.glob("*.jsonl"))[0].read_text().splitlines()
+    assert len(lines) == 1
+    assert json.loads(lines[0])["type"] == "fill"
 
 
 def test_filename_uses_session_date(tmp_path: Path):

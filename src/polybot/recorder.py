@@ -34,18 +34,24 @@ class Recorder:
         self,
         dir: Path | str,
         now: Callable[[], datetime] = _default_now,
+        record_snapshots: bool = False,
     ) -> None:
         self._dir = Path(dir)
         self._dir.mkdir(parents=True, exist_ok=True)
         date_str = now().date().isoformat()
         self._path = self._dir / f"{date_str}.jsonl"
         self._fh: IO[str] = self._path.open("a", encoding="utf-8")
+        self._record_snapshots = record_snapshots
 
     @property
     def path(self) -> Path:
         return self._path
 
     def record_snapshot(self, snap: MarketSnapshot) -> None:
+        # Snapshots dominate file size — several per second per market with the
+        # full ask ladder. Off by default; turn on only when you need replay.
+        if not self._record_snapshots:
+            return
         self._write("snapshot", asdict(snap))
 
     def record_intent(self, intent: TradeIntent) -> None:
