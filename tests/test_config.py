@@ -39,6 +39,12 @@ bot6_smartdipbuyer:
   trade_size_usdc: 5.00
   max_dip_pct: 0.50
   growth_window: 5
+bot7_speculation:
+  entry_price: 0.35
+  exit_price: 0.55
+  trade_size_usdc: 5.00
+  entry_cutoff_s: 150.0
+  force_exit_s: 150.0
 risk:
   max_daily_trades: 50
   max_daily_loss_usdc: 10.00

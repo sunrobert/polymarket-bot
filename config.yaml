@@ -55,6 +55,18 @@ bot6_smartdipbuyer:
   max_dip_pct: 0.50
   growth_window: 5
 
+bot7_speculation:
+  # Bot 7: fear-premium harvest. Bot 3 entry logic, but only enter while
+  # time_to_resolve_s > entry_cutoff_s (early speculation window). Force
+  # market-sell when time_to_resolve_s <= force_exit_s — escape before the
+  # market converges to truth in the final stretch, capping tail risk on
+  # held positions at "whatever the book gives us" instead of $0.
+  entry_price: 0.35
+  exit_price: 0.55
+  trade_size_usdc: 5.00
+  entry_cutoff_s: 150.0  # don't enter past 2:30 remaining
+  force_exit_s: 150.0    # hard market-sell at 2:30 remaining
+
 risk:
   max_daily_trades: 50
   max_daily_loss_usdc: 10.00

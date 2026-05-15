@@ -9,6 +9,7 @@ from polybot.strategy.bot3_dipbuyer import Bot3DipBuyerStrategy
 from polybot.strategy.bot4_rallyfader import Bot4RallyFaderStrategy
 from polybot.strategy.bot5_bothsides import Bot5BothSidesStrategy
 from polybot.strategy.bot6_smartdipbuyer import Bot6SmartDipBuyerStrategy
+from polybot.strategy.bot7_speculation import Bot7SpeculationStrategy
 
 
 def make_strategy(name: str, cfg: Config):
@@ -76,6 +77,17 @@ def make_strategy(name: str, cfg: Config):
             max_dip_pct=b6.max_dip_pct,
             growth_window=b6.growth_window,
         )
+    if name == "bot7_speculation":
+        b7 = cfg.bot7_speculation
+        if b7 is None:
+            raise ValueError("bot7_speculation selected but config.bot7_speculation is missing")
+        return Bot7SpeculationStrategy(
+            entry_price=b7.entry_price,
+            exit_price=b7.exit_price,
+            trade_size_usdc=b7.trade_size_usdc,
+            entry_cutoff_s=b7.entry_cutoff_s,
+            force_exit_s=b7.force_exit_s,
+        )
     raise ValueError(f"unknown strategy: {name}")
 
 
@@ -87,5 +99,6 @@ BOT_NAMES = (
     "bot4_rallyfader",
     "bot5_bothsides",
     "bot6_smartdipbuyer",
+    "bot7_speculation",
 )
 BOTS_NEEDING_BTC_FEED = ("bot2_filter", "bot2_signal")

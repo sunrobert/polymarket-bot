@@ -114,6 +114,27 @@ class Bot6SmartDipBuyerConfig(BaseModel):
         return self
 
 
+class Bot7SpeculationConfig(BaseModel):
+    entry_price: Decimal
+    exit_price: Decimal
+    trade_size_usdc: Decimal
+    entry_cutoff_s: float
+    force_exit_s: float
+
+    @model_validator(mode="after")
+    def _ordered(self) -> "Bot7SpeculationConfig":
+        if self.entry_price <= 0 or self.entry_price >= self.exit_price:
+            raise ValueError(
+                f"need 0 < entry_price < exit_price, got "
+                f"{self.entry_price}/{self.exit_price}"
+            )
+        if self.trade_size_usdc <= 0:
+            raise ValueError("trade_size_usdc must be > 0")
+        if self.entry_cutoff_s <= 0 or self.force_exit_s <= 0:
+            raise ValueError("entry_cutoff_s and force_exit_s must be > 0")
+        return self
+
+
 class RiskConfig(BaseModel):
     max_daily_trades: int = Field(gt=0)
     max_daily_loss_usdc: Decimal = Field(gt=0)
@@ -143,6 +164,7 @@ class Config(BaseModel):
     bot4_rallyfader: Bot4RallyFaderConfig | None = None
     bot5_bothsides: Bot5BothSidesConfig | None = None
     bot6_smartdipbuyer: Bot6SmartDipBuyerConfig | None = None
+    bot7_speculation: Bot7SpeculationConfig | None = None
 
 
 def load_config(path: Path | str) -> Config:

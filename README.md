@@ -143,6 +143,7 @@ The runner records every snapshot, intent, fill, and resolution to JSONL so a se
 | `bot4_rallyfader` | Pessimistic mirror of Bot 3. Enter Down when Down ask ≤ $0.35 (Up has rallied hard), exit when implied Down bid ≥ $0.55. | No | Active testing |
 | `bot5_bothsides` | Union of Bot 3 + Bot 4 in one bot. Buys whichever side dips to $0.35, sells when that side recovers to $0.55. | No | Active testing |
 | `bot6_smartdipbuyer` | Bot 3 + crash filter (skip if Up dipped >50% from session high) + momentum confirmation (require last 5 snapshots non-decreasing with net positive growth). Up side only. | No | Active testing |
+| `bot7_speculation` | Bot 3 + time-window discipline. Only enter while time-to-resolve > 2:30 (early speculation window). Force market-sell at 2:30 remaining regardless of price. Tests the fear-premium-decay thesis. | No | Active testing |
 
 Each strategy is a pure function: `decide(snapshot, holds_market, position) -> TradeIntent | None`. No I/O, no globals. The same code runs in paper, backtest, and (eventually) live.
 
@@ -188,6 +189,7 @@ python scripts/run_paper.py --bot bot3_dipbuyer
 python scripts/run_paper.py --bot bot4_rallyfader
 python scripts/run_paper.py --bot bot5_bothsides
 python scripts/run_paper.py --bot bot6_smartdipbuyer
+python scripts/run_paper.py --bot bot7_speculation
 ```
 
 Each bot writes its recording to `recordings/<bot>/YYYY-MM-DD.jsonl`. Bots can run in parallel tabs without overwriting each other.
